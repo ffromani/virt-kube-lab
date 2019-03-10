@@ -8,31 +8,47 @@ TODO
 
 ### host/lan setup
 
+Host distribution: CentOS 7
+
+### Required packages
+```bash
+libguestfs
+libguestfs-xfs
+libguestfs-tools
+libguestfs-tools-c
+jq
+```
 
 ### Provision golden image for virtual machines
 ```bash
-virt-builder -o /var/lib/libvirt/images/c7-base-0.qcow2 --size=80G --format qcow2 --ssh-inject root:file:kojiro-kube-lan.pub --update --selinux-relabel --root-password file:rootpw centos-7.6
+virt-builder -o /var/lib/libvirt/images/c7-base.qcow2 --size=80G --format qcow2 --ssh-inject root:file:kojiro-kube-lan.pub --update --selinux-relabel --root-password file:rootpw centos-7.6
+```
+
+### Initial steps
+
+```bash
+export VM_NAME="${VM_NAME}"
 ```
 
 ### Provision virtual machines
 
 Clone the disks:
 ```bash
-cp -a /var/lib/libvirt/images/c7-base-0.qcow2 /var/lib/libvirt/images/c7-allinone-0.qcow2
+cp -a /var/lib/libvirt/images/c7-base.qcow2 /var/lib/libvirt/images/${VM_NAME}.qcow2
 ```
 
 
 #### Provision for All-in-One:
 ```bash
-virt-install --name c7-allinone-0 --ram 6144 --vcpus 4 --cpu host --os-type linux --os-variant centos7.0 --disk path=/var/lib/libvirt/images/c7-allinone-0.qcow2,device=disk,bus=virtio,format=qcow2 --network bridge=k8sbr0,model=virtio --graphics none --console pty,target_type=serial --import
+virt-install --name ${VM_NAME} --ram 6144 --vcpus 4 --cpu host --os-type linux --os-variant centos7.0 --disk path=/var/lib/libvirt/images/${VM_NAME}.qcow2,device=disk,bus=virtio,format=qcow2 --network bridge=k8sbr0,model=virtio --graphics none --console pty,target_type=serial --import
 ```
 
 ### Set up DNS, IP
 ```bash
 # TODO: dns
-virsh qemu-agent-command c7-allinone-0 '{"execute":"guest-network-get-interfaces"}' | python -mjson.tool
+virsh qemu-agent-command ${VM_NAME} '{"execute":"guest-network-get-interfaces"}' | python -mjson.tool
 # TODO: poweroff
-ssh -oStrictHostKeyChecking=no root@192.168.224.29 hostnamectl set-hostname c7-allinone-0.kube.lan
+ssh -oStrictHostKeyChecking=no root@192.168.224.29 hostnamectl set-hostname ${VM_NAME}.kube.lan
 ```
 
 ### Install base packages
@@ -46,16 +62,29 @@ SSHEOF
 
 ### Configure for Kubeadm
 
-The following script does the initial setup for a box on which we wanna run kubernetes:
+The following [script](scripts/-kube-box-setup.sh) demonstrates the needed/recommended steps to setup a box on which we wanna run kubernetes.
+The script requires root privileges.
+The script is built for convenience/fast setup. The steps are taken from the kubernetes documentation, so they are believed to be correct,
+but there is no error check or recovery, so **YOU SHOULD NEVER RUN THIS SCRIPT UNAUDITED OR ON A PRODUCTION, OR OTHERWISE IMPORTANT, BOX**.
 
 ```bash
 # !/bin/bash
 set -e
+
 ## REPOS
-# TODO: set up k8s repo
+cat <<EOF > /etc/yum.repos.d/kubernetes.repo
+[kubernetes]
+name=Kubernetes
+baseurl=https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
+enabled=1
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+exclude=kube*
+EOF
 
 ## SELinux
-# Set SELinux in permissive mode (effectively disabling it)
+# Set SELinux in permissive mode (effectively disabling it) - still needed as k8s 1.13, unfortunately.
 setenforce 0
 sed -i 's/^SELINUX=enforcing$/SELINUX=permissive/' /etc/selinux/config
 
@@ -74,34 +103,46 @@ EOF
 modprobe br_netfilter
 
 ## Firewalld
-# TODO: disable and mask firewalld
+systemctl stop firewalld
+systemctl disable firewalld
+systemctl mask firewalld
+
+## Reset iptables
+iptables -P INPUT ACCEPT
+iptables -P FORWARD ACCEPT
+iptables -P OUTPUT ACCEPT
+iptables -t nat -F
+iptables -t mangle -F
+iptables -F
+iptables -X
 
 ## SWAP
-# TODO: DISABLE SWAP
+cp /etc/fstab /etc/fstab.orig
+grep -v /etc/fstab.orig > /etc/fstab
 ```
 
 To run the script on the provisioned VM:
 ```
-ssh -T root@c7-allinone-0 < kube-box-setup.sh
+ssh -T root@${VM_NAME} < kube-box-setup.sh
 ```
 
 ### Install required packages
 
 ```bash
-ssh root@c7-allinone-0 yum install -y docker
-ssh root@c7-allinone-0 yum install -y kubelet kubeadm kubectl --disableexcludes=kubernetes
+ssh root@${VM_NAME} yum install -y docker
+ssh root@${VM_NAME} yum install -y kubelet kubeadm kubectl --disableexcludes=kubernetes
 ```
 
 ```bash
-ssh root@c7-allinone-0 systemctl enable --now docker
-ssh root@c7-allinone-0 systemctl enable --now kubelet
+ssh root@${VM_NAME} systemctl enable --now docker
+ssh root@${VM_NAME} systemctl enable --now kubelet
 ```
 
 ### Run kubeadm
 
 ```bash
 # we will use flannel, so use parameters recommended by flannel
-ssh root@c7-allinone-0 kubeadm init --pod-network-cidr=10.244.0.0/16 --ignore-preflight-errors=swap
+ssh root@${VM_NAME} kubeadm init --pod-network-cidr=10.244.0.0/16 --ignore-preflight-errors=swap
 ```
 
 ```bash

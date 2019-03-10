@@ -1,7 +1,17 @@
 # !/bin/bash
 set -e
+
 ## REPOS
-# TODO: set up k8s repo
+cat <<EOF > /etc/yum.repos.d/kubernetes.repo
+[kubernetes]
+name=Kubernetes
+baseurl=https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
+enabled=1
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+exclude=kube*
+EOF
 
 ## SELinux
 # Set SELinux in permissive mode (effectively disabling it)
@@ -23,7 +33,19 @@ EOF
 modprobe br_netfilter
 
 ## Firewalld
-# TODO: disable and mask firewalld
+systemctl stop firewalld
+systemctl disable firewalld
+systemctl mask firewalld
+
+## Reset iptables
+iptables -P INPUT ACCEPT
+iptables -P FORWARD ACCEPT
+iptables -P OUTPUT ACCEPT
+iptables -t nat -F
+iptables -t mangle -F
+iptables -F
+iptables -X
 
 ## SWAP
-# TODO: DISABLE SWAP
+cp /etc/fstab /etc/fstab.orig
+grep -v /etc/fstab.orig > /etc/fstab

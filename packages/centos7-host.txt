@@ -1,0 +1,5 @@
+libguestfs
+libguestfs-xfs
+libguestfs-tools
+libguestfs-tools-c
+jq
