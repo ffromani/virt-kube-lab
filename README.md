@@ -27,7 +27,7 @@ virt-builder -o /var/lib/libvirt/images/c7-base.qcow2 --size=80G --format qcow2 
 ### Initial steps
 
 ```bash
-export VM_NAME="${VM_NAME}"
+export VM_NAME="c7-test-vm"
 ```
 
 ### Provision virtual machines
