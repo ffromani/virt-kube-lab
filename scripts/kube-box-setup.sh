@@ -46,6 +46,6 @@ iptables -t mangle -F
 iptables -F
 iptables -X
 
-## SWAP
+## Disable swap - to avoid annoyances with kubelet
 cp /etc/fstab /etc/fstab.orig
-grep -v /etc/fstab.orig > /etc/fstab
+grep -v swap /etc/fstab.orig > /etc/fstab

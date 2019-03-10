@@ -46,14 +46,32 @@ virt-install --name ${VM_NAME} --ram 6144 --vcpus 4 --cpu host --os-type linux -
 ### Set up DNS, IP
 ```bash
 # TODO: dns
-virsh qemu-agent-command ${VM_NAME} '{"execute":"guest-network-get-interfaces"}' | python -mjson.tool
+```
+
+TODO: the jq queries are naive and fragile
+
+Discover the MAC address of the default NIC of the box:
+```bash
+export VM_MACADDR=$(virsh qemu-agent-command ${VM_NAME} '{"execute":"guest-network-get-interfaces"}' | jq -r '.return[1] | .["hardware-address"]')
+```
+
+Discover the IP address assigned to the box:
+```bash
+export VM_IPADDR=$(virsh qemu-agent-command ${VM_NAME} '{"execute":"guest-network-get-interfaces"}' | jq -r '.return[1] | .["ip-addresses"][0] | .["ip-address"]')
+```
+
+Set the user-friendly hostname:
+```bash
+ssh -oStrictHostKeyChecking=no root@${VM_IPADDR} hostnamectl set-hostname ${VM_NAME}.kube.lan
+```
+
+
 # TODO: poweroff
-ssh -oStrictHostKeyChecking=no root@192.168.224.29 hostnamectl set-hostname ${VM_NAME}.kube.lan
 ```
 
 ### Install base packages
 ```bash
-ssh -oStrictHostKeyChecking=no root@192.168.224.29 << SSHEOF
+ssh T -oStrictHostKeyChecking=no root@${VM_IPADDR} << SSHEOF
 yum -y install net-tools vim-enhanced htop atop wget
 SSHEOF
 ```
@@ -116,14 +134,14 @@ iptables -t mangle -F
 iptables -F
 iptables -X
 
-## SWAP
+## Disable swap - to avoid annoyances with kubelet
 cp /etc/fstab /etc/fstab.orig
-grep -v /etc/fstab.orig > /etc/fstab
+grep -v swap /etc/fstab.orig > /etc/fstab
 ```
 
 To run the script on the provisioned VM:
 ```
-ssh -T root@${VM_NAME} < kube-box-setup.sh
+ssh -T root@${VM_IPADDR} < kube-box-setup.sh
 ```
 
 ### Install required packages
