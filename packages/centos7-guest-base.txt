@@ -1,0 +1,5 @@
+net-tools
+vim-enhanced
+htop
+atop
+wget

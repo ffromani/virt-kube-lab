@@ -50,30 +50,25 @@ virt-install --name ${VM_NAME} --ram 6144 --vcpus 4 --cpu host --os-type linux -
 
 TODO: the jq queries are naive and fragile
 
-Discover the MAC address of the default NIC of the box:
+Discover the network addresses of the box, using the main (/default) NIC
 ```bash
-export VM_MACADDR=$(virsh qemu-agent-command ${VM_NAME} '{"execute":"guest-network-get-interfaces"}' | jq -r '.return[1] | .["hardware-address"]')
+VM_MACADDR=$(virsh qemu-agent-command ${VM_NAME} '{"execute":"guest-network-get-interfaces"}' | jq -r '.return[1] | .["hardware-address"]')
+VM_IPADDR=$(virsh qemu-agent-command ${VM_NAME} '{"execute":"guest-network-get-interfaces"}' | jq -r '.return[1] | .["ip-addresses"][0] | .["ip-address"]')
+echo -e "export VM_MACADDR=${VM_MACADDR}\nexport VM_IPADDR=${VM_IPADDR}"
 ```
 
-Discover the IP address assigned to the box:
-```bash
-export VM_IPADDR=$(virsh qemu-agent-command ${VM_NAME} '{"execute":"guest-network-get-interfaces"}' | jq -r '.return[1] | .["ip-addresses"][0] | .["ip-address"]')
-```
+Copy paste
 
 Set the user-friendly hostname:
 ```bash
 ssh -oStrictHostKeyChecking=no root@${VM_IPADDR} hostnamectl set-hostname ${VM_NAME}.kube.lan
 ```
 
-
-# TODO: poweroff
 ```
 
 ### Install base packages
 ```bash
-ssh T -oStrictHostKeyChecking=no root@${VM_IPADDR} << SSHEOF
-yum -y install net-tools vim-enhanced htop atop wget
-SSHEOF
+ssh T root@${VM_IPADDR} yum -y install $( cat packages/centos7-guest-base.txt )
 ```
 
 ## Kubernetes
@@ -147,7 +142,7 @@ ssh -T root@${VM_IPADDR} < kube-box-setup.sh
 ### Install required packages
 
 ```bash
-ssh root@${VM_NAME} yum install -y docker
+ssh root@${VM_NAME} yum install -y $( cat packages/centos7-guest-container-base.txt )
 ssh root@${VM_NAME} yum install -y kubelet kubeadm kubectl --disableexcludes=kubernetes
 ```
 
