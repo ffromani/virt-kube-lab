@@ -45,29 +45,50 @@ SSHEOF
 ## Kubernetes
 
 ### Configure for Kubeadm
+
+The following script does the initial setup for a box on which we wanna run kubernetes:
+
 ```bash
-# set up repo
-## Set SELinux in permissive mode (effectively disabling it)
-#setenforce 0
-#sed -i 's/^SELINUX=enforcing$/SELINUX=permissive/' /etc/selinux/config
-# cat <<EOF >  /etc/sysctl.d/k8s.conf
+# !/bin/bash
+set -e
+## REPOS
+# TODO: set up k8s repo
+
+## SELinux
+# Set SELinux in permissive mode (effectively disabling it)
+setenforce 0
+sed -i 's/^SELINUX=enforcing$/SELINUX=permissive/' /etc/selinux/config
+
+## Kernel
+# setup kernel parameters needed/recommended by k8s
+cat <<EOF >  /etc/sysctl.d/k8s.conf
 net.bridge.bridge-nf-call-ip6tables = 1
 net.bridge.bridge-nf-call-iptables = 1
 net.ipv4.ip_forward = 1
 EOF
-ssh root@c7-allinone-0 sysctl --system
-# cat <<EOF > /etc/modules-load.d/k8s.conf
+sysctl --system
+# setup kernel modules needed/recommended by k8s
+cat <<EOF > /etc/modules-load.d/k8s.conf
 br_netfilter
 EOF
-# load br_netfilter
-# disable and mask firewalld
-# DISABLE SWAP
+modprobe br_netfilter
+
+## Firewalld
+# TODO: disable and mask firewalld
+
+## SWAP
+# TODO: DISABLE SWAP
+```
+
+To run the script on the provisioned VM:
+```
+ssh -T root@c7-allinone-0 < kube-box-setup.sh
 ```
 
 ### Install required packages
 
 ```bash
-ssh -oStrictHostKeyChecking=no root@192.168.224.29 yum install -y docker
+ssh root@c7-allinone-0 yum install -y docker
 ssh root@c7-allinone-0 yum install -y kubelet kubeadm kubectl --disableexcludes=kubernetes
 ```
 
@@ -79,7 +100,12 @@ ssh root@c7-allinone-0 systemctl enable --now kubelet
 ### Run kubeadm
 
 ```bash
+# we will use flannel, so use parameters recommended by flannel
 ssh root@c7-allinone-0 kubeadm init --pod-network-cidr=10.244.0.0/16 --ignore-preflight-errors=swap
+```
+
+```bash
+# TODO: setup flannel
 ```
 
 ### Configure the host ass All-in-One
