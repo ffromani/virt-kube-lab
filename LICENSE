@@ -1,3 +1,14 @@
+Unless otherwise specified, all the content of this repository is licensed
+in the following way:
+
+0. Code snippets (any non-standalone code, e.g embedded in the docs)
+Feel free to extract them. I put them in the public domain -
+I don't claim any copyright on them. Howver, for docs *as whole*:
+
+1. Documentation (e.g. .md files):
+https://creativecommons.org/licenses/by-sa/3.0/it/deed.it
+
+3. Programs (any non-embedded code, e.g. scripts, packages, libraries):
 MIT License
 
 Copyright (c) 2019 Francesco Romani
