@@ -102,13 +102,15 @@ Set the user-friendly hostname:
 ssh -oStrictHostKeyChecking=no root@${VM_IPADDR} hostnamectl set-hostname ${VM_NAME}.kube.lan
 ```
 
-```
-
 ### Install base packages
 ```bash
 # user
 ssh -T root@${VM_IPADDR} yum -y install $( cat packages/centos7-guest-base.txt )
 ```
+
+## Pick your distribution
+
+Below the instructions for vanilla Kubernetes (K8S) and Openshift Origin (OKD)
 
 ## Kubernetes (K8S)
 
