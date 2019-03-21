@@ -14,7 +14,9 @@ Entities used in this document:
 ## hardware
 TODO
 
-### boxes/lan setup
+## setup
+
+### general
 
 In this document, we assume you have a checkout of the `virt-kube-lab` repo on the `user` box, and that all commands are run within the root directory of the repo:
 ```bash
@@ -22,41 +24,60 @@ user# git clone https://github.com/mojaves/virt-kube-lab.git
 user# cd virt-kube-lab
 ```
 
+### host
+
 WRITEME
 Host distribution: CentOS 7
 
+set up bridge and export its name:
+
+```bash
+# host
+export VM_BRIDGE="k8sbr0"
+```
+
+### lan
+
 ### Required packages
 ```bash
-libguestfs
-libguestfs-xfs
-libguestfs-tools
-libguestfs-tools-c
+# host
+yum -y install \
+libguestfs \
+libguestfs-xfs \
+libguestfs-tools \
+libguestfs-tools-c \
 jq
 ```
 
 ### Provision golden image for virtual machines
 ```bash
-host# virt-builder -o /var/lib/libvirt/images/c7-base.qcow2 --size=80G --format qcow2 --ssh-inject root:file:kojiro-kube-lan.pub --update --selinux-relabel --root-password file:rootpw centos-7.6
+# host
+virt-builder -o /var/lib/libvirt/images/c7-base.qcow2 --size=80G --format qcow2 --ssh-inject root:file:kojiro-kube-lan.pub --update --selinux-relabel --root-password file:rootpw centos-7.6
 ```
 
 ### Initial steps
 
 ```bash
-host# export VM_NAME="c7-test-vm"
+# host
+export VM_NAME="c7-test-vm"
 ```
 
 ### Provision virtual machines
 
 Clone the disks:
 ```bash
-host# cp -a /var/lib/libvirt/images/c7-base.qcow2 /var/lib/libvirt/images/${VM_NAME}.qcow2
+# host
+cp -a /var/lib/libvirt/images/c7-base.qcow2 /var/lib/libvirt/images/${VM_NAME}.qcow2
 ```
 
 
 #### Provision for All-in-One:
 ```bash
-host# virt-install --name ${VM_NAME} --ram 6144 --vcpus 4 --cpu host --os-type linux --os-variant centos7.0 --disk path=/var/lib/libvirt/images/${VM_NAME}.qcow2,device=disk,bus=virtio,format=qcow2 --network bridge=k8sbr0,model=virtio --graphics none --console pty,target_type=serial --import
+# host
+virt-install --name ${VM_NAME} --ram 6144 --vcpus 4 --cpu host --os-type linux --os-variant centos7.0 --disk path=/var/lib/libvirt/images/${VM_NAME}.qcow2,device=disk,bus=virtio,format=qcow2 --network bridge=${VM_BRIDGE},model=virtio --graphics none --console pty,target_type=serial --import
 ```
+
+TODO: set up CPU passthrough (KVM L2)
 
 ### Set up DNS, IP
 ```bash
@@ -67,26 +88,29 @@ TODO: the jq queries are naive and fragile
 
 Discover the network addresses of the box, using the main (/default) NIC
 ```bash
-host# VM_MACADDR=$(virsh qemu-agent-command ${VM_NAME} '{"execute":"guest-network-get-interfaces"}' | jq -r '.return[1] | .["hardware-address"]')
-host# VM_IPADDR=$(virsh qemu-agent-command ${VM_NAME} '{"execute":"guest-network-get-interfaces"}' | jq -r '.return[1] | .["ip-addresses"][0] | .["ip-address"]')
-host# echo -e "export VM_MACADDR=${VM_MACADDR}\nexport VM_IPADDR=${VM_IPADDR}"
+# host
+VM_MACADDR=$(virsh qemu-agent-command ${VM_NAME} '{"execute":"guest-network-get-interfaces"}' | jq -r '.return[1] | .["hardware-address"]')
+VM_IPADDR=$(virsh qemu-agent-command ${VM_NAME} '{"execute":"guest-network-get-interfaces"}' | jq -r '.return[1] | .["ip-addresses"][0] | .["ip-address"]')
+echo -e "export VM_NAME=${VM_NAME}\nexport VM_MACADDR=${VM_MACADDR}\nexport VM_IPADDR=${VM_IPADDR}"
 ```
 
 Now copy paste the output of last command (`VM_MACADDR` and `VM_IPADDR` variable definition) on `client`
 
 Set the user-friendly hostname:
 ```bash
-user# ssh -oStrictHostKeyChecking=no root@${VM_IPADDR} hostnamectl set-hostname ${VM_NAME}.kube.lan
+# user
+ssh -oStrictHostKeyChecking=no root@${VM_IPADDR} hostnamectl set-hostname ${VM_NAME}.kube.lan
 ```
 
 ```
 
 ### Install base packages
 ```bash
-user# ssh T root@${VM_IPADDR} yum -y install $( cat packages/centos7-guest-base.txt )
+# user
+ssh -T root@${VM_IPADDR} yum -y install $( cat packages/centos7-guest-base.txt )
 ```
 
-## Kubernetes
+## Kubernetes (K8S)
 
 ### Configure for Kubeadm
 
@@ -151,26 +175,30 @@ grep -v swap /etc/fstab.orig > /etc/fstab
 
 To run the script on the provisioned VM:
 ```
-user# ssh -T root@${VM_IPADDR} < kube-box-setup.sh
+# user
+ssh -T root@${VM_IPADDR} < kube-box-setup.sh
 ```
 
 ### Install required packages
 
 ```bash
-user# ssh root@${VM_NAME} yum install -y $( cat packages/centos7-guest-container-base.txt )
-user# ssh root@${VM_NAME} yum install -y kubelet kubeadm kubectl --disableexcludes=kubernetes
+# user
+ssh root@${VM_NAME} yum install -y $( cat packages/centos7-guest-container-base.txt )
+ssh root@${VM_NAME} yum install -y kubelet kubeadm kubectl --disableexcludes=kubernetes
 ```
 
 ```bash
-user# ssh root@${VM_NAME} systemctl enable --now docker
-user# ssh root@${VM_NAME} systemctl enable --now kubelet
+# user
+ssh root@${VM_NAME} systemctl enable --now docker
+ssh root@${VM_NAME} systemctl enable --now kubelet
 ```
 
 ### Run kubeadm
 
 ```bash
 # we will use flannel, so use parameters recommended by flannel
-user# ssh root@${VM_NAME} kubeadm init --pod-network-cidr=10.244.0.0/16 --ignore-preflight-errors=swap
+# user
+ssh root@${VM_NAME} kubeadm init --pod-network-cidr=10.244.0.0/16 --ignore-preflight-errors=swap
 ```
 
 ```bash
@@ -181,3 +209,7 @@ user# ssh root@${VM_NAME} kubeadm init --pod-network-cidr=10.244.0.0/16 --ignore
 
 TODO: (un)taint node
 
+
+## Openshift Origin (OKD)
+
+TODO
